@@ -5,7 +5,7 @@
 
 | Parameter       | Wert                                  | Beispiel                                   | Mandatory | Default  |
 |-----------------|---------------------------------------|--------------------------------------------|-----------|----------|
-| Server          | Serveradresse                         | ubnt.ts-man.ch                            | true      | -        |
+| Server          | Serveradresse                         | cloud.test.com                            | true      | -        |
 | Port            | HTTPS Port des Servers                 | 8443                                       | false     | 8443     |
 | Sites           | Sites die geprüft werden sollen        | 'default','4p236c5s'                      | false     | -        |
 | ExcludeSites    | Seiten die nicht geprüft werden sollen | '4p236c5s'                                | false     | -        |
@@ -31,4 +31,4 @@
 Zuerst Firewalls aktualisieren, dann Switches, dann APs:
 
 ```powershell
-.\ubnt_upgrade_dev.ps1 -Server 'clodu.test.com' -Port 443 -Username 'admin' -Password '**********' -ExcludeSite imywerwc,ai0cgmek,4p236c5s,83o05okv -UpdateAPs -UpdateSwitches -UpdateGateways -DryRun
+.\ubnt_upgrade_dev.ps1 -Server 'cloud.test.com' -Port 443 -Username 'admin' -Password '**********' -ExcludeSite imywerwc,ai0cgmek,4p236c5s,83o05okv -UpdateAPs -UpdateSwitches -UpdateGateways -DryRun
