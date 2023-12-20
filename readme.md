@@ -1,8 +1,5 @@
 # Ubiquiti Firmware Update PowerShell Script
 
-## Skript
-[ubnt_upgrade_dev.ps1](T:\GitHub\Ubiquiti-FWUpdate-Powershell\ubnt_upgrade_dev.ps1)
-
 ## Parameters
 ### Parameterübersicht
 
