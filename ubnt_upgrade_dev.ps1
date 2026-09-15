@@ -6,7 +6,7 @@
     Update APs, Switches and Gateways
 
     .SYNTAX
-    ubnt_upgrade_dev [[-Server] <string>] [[-username] <string>] [[-password] <string>]
+    ubnt_upgrade_dev [[-Server] <string>] [[-username] <string>] [[-password] <string>] [-Legacy]
 
     .DESCRIPTION
     Checks if there are devices with available FW-Upgrade and runs the upgrade
@@ -15,7 +15,10 @@
     Specifies the ubnt controller server
 
     .PARAMETER Port
-    (Optional) Specifies the ubnt controller server port (Default = 8443)
+    (Optional) Specifies the controller port (Default: UniFi OS = 443, Legacy = 8443)
+
+    .PARAMETER Legacy
+    Use the legacy UniFi Network Controller API instead of the UniFi OS API
 
     .PARAMETER Username
     Username to connect to ubnt server
@@ -32,14 +35,17 @@
     .PARAMETER Info
     (Optional) Output of additional info (Default = False)
 
+    .PARAMETER ListSites
+    List sites containing upgradable devices and exit without upgrading
+
     .PARAMETER UpdateAPs
-    (Optional) Update Access Points (Default = True)
+    (Optional) Update Access Points (Default = False)
 
     .PARAMETER UpdateSwitches
-    (Optional) Update Switches (Default = True)
+    (Optional) Update Switches (Default = False)
 
     .PARAMETER UpdateGateways
-    (Optional) Update Gateways (Default = True)
+    (Optional) Update Gateways (Default = False)
 
     .PARAMETER DryRun
     (Optional) Run full script except do not send update command to APs
@@ -61,7 +67,10 @@ param(
         [string]$Server = '',
 
     [Parameter(Mandatory=$false)]
-        [string]$Port = '8443',
+        [string]$Port = '',
+
+    [Parameter(Mandatory=$false)]
+        [switch]$Legacy = $false,
 
     [Parameter(Mandatory=$false)]
         [array]$Sites = @(),
@@ -77,6 +86,9 @@ param(
 
     [Parameter(Mandatory=$false)]
         [switch]$Info = $false,
+
+    [Parameter(Mandatory=$false)]
+        [switch]$ListSites = $false,
     
     [Parameter(Mandatory=$false)]
         [switch]$UpdateAPs = $false,
@@ -95,20 +107,59 @@ param(
 [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}  
 
 #Define supported Protocols
-[System.Net.ServicePointManager]::SecurityProtocol = @("Tls12","Tls11","Tls","Ssl3")
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
 
-# Create $controller and $credential using multiple variables/parameters.
+# Create controller URLs and credentials.
+if ([string]::IsNullOrWhiteSpace($Port)) {
+    $Port = if ($Legacy) { '8443' } else { '443' }
+}
+
 [string]$controller = "https://$($server):$($port)"
-[string]$credential = "`{`"username`":`"$username`",`"password`":`"$password`"`}"
+[string]$loginPath = if ($Legacy) { '/api/login' } else { '/api/auth/login' }
+[string]$apiBase = if ($Legacy) { $controller } else { "$controller/proxy/network" }
+[string]$credential = @{
+    username = $Username
+    password = $Password
+} | ConvertTo-Json -Compress
 
 try {
     write-host "Connecting to Controller" -ForegroundColor Green
-    $null = Invoke-Restmethod -Uri "$controller/api/login" -method post -body $credential -ContentType "application/json; charset=utf-8"  -SessionVariable myWebSession
+    write-host "Mode: $(if ($Legacy) { 'Legacy Controller' } else { 'UniFi OS' })" -ForegroundColor Yellow
+    write-host "URL: $controller$loginPath" -ForegroundColor Yellow
+    write-host "Username: $Username" -ForegroundColor Yellow
+    $loginResponse = Invoke-WebRequest -Uri "$controller$loginPath" -Method Post -Body $credential -ContentType "application/json; charset=utf-8" -SessionVariable myWebSession -UseBasicParsing -Verbose
     sleep -Seconds 1
-}catch{
-	Write-Warning "Authentication failed"
+} catch {
+    Write-Warning "Authentication failed"
     Write-Warning $_
-	Exit
+    Write-Warning "Error details: $($Error[0].Exception.Message)"
+    Exit
+}
+
+$requestHeaders = @{}
+if (!$Legacy) {
+    $csrfToken = [string]$loginResponse.Headers['X-CSRF-Token']
+
+    if ([string]::IsNullOrWhiteSpace($csrfToken)) {
+        $tokenCookie = $myWebSession.Cookies.GetCookies([uri]$controller) |
+            Where-Object { $_.Name -eq 'TOKEN' } |
+            Select-Object -First 1
+
+        if ($tokenCookie) {
+            try {
+                $jwtPayload = $tokenCookie.Value.Split('.')[1].Replace('-', '+').Replace('_', '/')
+                $jwtPayload = $jwtPayload.PadRight($jwtPayload.Length + ((4 - $jwtPayload.Length % 4) % 4), '=')
+                $jwtData = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($jwtPayload)) | ConvertFrom-Json
+                $csrfToken = [string]$jwtData.csrfToken
+            } catch {
+                Write-Verbose "CSRF token could not be extracted from the UniFi OS session token."
+            }
+        }
+    }
+
+    if (![string]::IsNullOrWhiteSpace($csrfToken)) {
+        $requestHeaders['X-CSRF-Token'] = $csrfToken
+    }
 }
 
 $sitesTable = @()
@@ -116,7 +167,7 @@ $sitesTable = @()
     write-host "Getting Sites" -ForegroundColor Green
     try {
         sleep -Seconds 1
-        $allSites = Invoke-WebRequest -Uri "$controller/api/self/sites" -WebSession $myWebSession -UseBasicParsing
+        $allSites = Invoke-WebRequest -Uri "$apiBase/api/self/sites" -WebSession $myWebSession -UseBasicParsing
     }catch{
         write-warning $_
     }
@@ -174,7 +225,7 @@ foreach ($Site in $sitesTable){
     }
     
     try{
-        $jsonSiteDevs = Invoke-Restmethod -Uri "$controller/api/s/$siteID/stat/device-basic" -WebSession $myWebSession
+        $jsonSiteDevs = Invoke-Restmethod -Uri "$apiBase/api/s/$siteID/stat/device-basic" -WebSession $myWebSession
         sleep -Milliseconds 250
     }catch{
         Write-Warning $_
@@ -192,7 +243,7 @@ foreach ($Site in $sitesTable){
         # all 
         $devMAC = $device.mac
 
-        $jsonDevice = Invoke-Restmethod -Uri "$controller/api/s/$siteID/stat/device/$devMAC" -WebSession $myWebSession
+        $jsonDevice = Invoke-Restmethod -Uri "$apiBase/api/s/$siteID/stat/device/$devMAC" -WebSession $myWebSession
         $deviceData = $jsonDevice.data
         
         if($info){ write-host $deviceData -ForegroundColor Magenta }
@@ -231,6 +282,37 @@ if($Info){
     write-host "------------------" -ForegroundColor DarkYellow    
 }
 
+if ($ListSites) {
+    $siteUpgradeTable = @(
+        foreach ($site in $sitesTable) {
+            $siteDevices = @($tableDevicesUpgrd | Where-Object {
+                $_.siteID -eq $site.ID -and $_.state -eq 1
+            })
+            $uapCount = @($siteDevices | Where-Object { $_.type -eq 'uap' }).Count
+            $uswCount = @($siteDevices | Where-Object { $_.type -eq 'usw' }).Count
+            $ugwCount = @($siteDevices | Where-Object { $_.type -eq 'ugw' }).Count
+
+            if (($uapCount + $uswCount + $ugwCount) -gt 0) {
+                [PSCustomObject][ordered]@{
+                    'SiteID'    = $site.ID
+                    'Site Name' = $site.name
+                    'UAP Num'   = $uapCount
+                    'USW Num'   = $uswCount
+                    'UGW Num'   = $ugwCount
+                }
+            }
+        }
+    )
+
+    if ($siteUpgradeTable.Count -gt 0) {
+        $siteUpgradeTable | Format-Table -AutoSize
+    } else {
+        Write-Warning 'No sites with upgradable devices found.'
+    }
+
+    exit
+}
+
 
 
 $uapUpgradable = $tableDevicesUpgrd | Where-Object {($_.type -eq "uap") -and ($_.state -eq 1)}
@@ -247,6 +329,11 @@ $ugwUpgradableCnt = $ugwUpgradable.count
 write-host $uapUpgradableCnt "UAP Upgradable" -ForegroundColor Yellow
 write-host $uswUpgradableCnt "USW Upgradable" -ForegroundColor Yellow
 write-host $ugwUpgradableCnt "UGW Upgradable" -ForegroundColor Yellow
+
+if (!$UpdateAPs -and !$UpdateSwitches -and !$UpdateGateways) {
+    Write-Warning "No device types selected. Use -UpdateAPs, -UpdateSwitches and/or -UpdateGateways."
+    exit
+}
 
 $doUpgreads = @()
 if($UpdateAPs){      $doUpgreads += $tableDevicesUpgrd | Where-Object {($_.type -eq "uap") -and ($_.state -eq 1)} }
@@ -267,12 +354,11 @@ if($doUpgreads.Count -ne 0){
             $siteID = $device.siteID
         
             $JSON = @{
-                "cmd" = "upgrade"
                 "mac" = $device.mac
             } | ConvertTo-Json
 
             try{
-                $upgradeRequestReturn = Invoke-RestMethod -Uri "$controller/api/s/$siteID/cmd/devmgr/upgrade/$devMAC" -WebSession $myWebSession -ContentType "application/json; charset=utf-8" -Method post -Body $JSON    
+                $upgradeRequestReturn = Invoke-RestMethod -Uri "$apiBase/api/s/$siteID/cmd/devmgr/upgrade" -WebSession $myWebSession -Headers $requestHeaders -ContentType "application/json; charset=utf-8" -Method post -Body $JSON
                 $upgradeRequestReturn.data
                 sleep -Seconds 1
             }catch{
@@ -284,7 +370,7 @@ if($doUpgreads.Count -ne 0){
         $doUpgreads | ft * -AutoSize
         exit
     }
-}else{ write-warning "No Devices to Update" }
+}else{ write-warning "No upgradeable devices found for the selected device types." }
 
 exit
 #if($UpdateAPs){
