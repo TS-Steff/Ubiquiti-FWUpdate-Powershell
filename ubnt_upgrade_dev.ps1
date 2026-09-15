@@ -362,7 +362,7 @@ if($doUpgreads.Count -ne 0){
         write-host "Updating $uapUpgradableCnt UAPs" -ForegroundColor Green
         foreach($device in $doUpgreads){
 
-            write-host "send request to $($device.mac) - $($device.sitename)" -ForegroundColor DarkYellow
+            write-host "send request to $($device.mac) - $($device.sitename) - $($device.name)" -ForegroundColor DarkYellow
             $siteID = $device.siteID
         
             $JSON = @{
