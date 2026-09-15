@@ -140,7 +140,7 @@ try {
     write-host "URL: $controller$loginPath" -ForegroundColor Yellow
     write-host "Username: $Username" -ForegroundColor Yellow
     $loginResponse = Invoke-WebRequest -Uri "$controller$loginPath" -Method Post -Body $credential -ContentType "application/json; charset=utf-8" -SessionVariable myWebSession -UseBasicParsing -Verbose
-    sleep -Seconds 1
+    Start-Sleep -Seconds 1
 } catch {
     Write-Warning "Authentication failed"
     Write-Warning $_
@@ -178,7 +178,7 @@ $sitesTable = @()
 #if($Sites.Count -eq 0){
     write-host "Getting Sites" -ForegroundColor Green
     try {
-        sleep -Seconds 1
+        Start-Sleep -Seconds 1
         $allSites = Invoke-WebRequest -Uri "$apiBase/api/self/sites" -WebSession $myWebSession -UseBasicParsing
     }catch{
         write-warning $_
@@ -238,7 +238,7 @@ foreach ($Site in $sitesTable){
     
     try{
         $jsonSiteDevs = Invoke-Restmethod -Uri "$apiBase/api/s/$siteID/stat/device-basic" -WebSession $myWebSession
-        sleep -Milliseconds 250
+        Start-Sleep -Milliseconds 250
     }catch{
         Write-Warning $_
         Exit
@@ -290,7 +290,7 @@ foreach ($Site in $sitesTable){
 if($Info){ 
     write-host
     write-host "TableDevicesUpgrd" -ForegroundColor DarkYellow
-    $tableDevicesUpgrd | FT * -AutoSize 
+    $tableDevicesUpgrd | Format-Table * -AutoSize 
     write-host "------------------" -ForegroundColor DarkYellow    
 }
 
@@ -353,7 +353,7 @@ if($UpdateSwitches){ $doUpgreads += $tableDevicesUpgrd | Where-Object {($_.type 
 if($UpdateGateways){ $doUpgreads += $tableDevicesUpgrd | Where-Object {($_.type -eq "ugw") -and ($_.state -eq 1)} } 
   
 
-if($Info){ write-host; write-host "Do Upgrades Table" -ForegroundColor Green; $doUpgreads | ft * -AutoSize; write-host "----------------" -ForegroundColor Green }
+if($Info){ write-host; write-host "Do Upgrades Table" -ForegroundColor Green; $doUpgreads | Format-Table * -AutoSize; write-host "----------------" -ForegroundColor Green }
 
 if($doUpgreads.Count -ne 0){
     if(!$DryRun){
@@ -372,14 +372,15 @@ if($doUpgreads.Count -ne 0){
             try{
                 $upgradeRequestReturn = Invoke-RestMethod -Uri "$apiBase/api/s/$siteID/cmd/devmgr/upgrade" -WebSession $myWebSession -Headers $requestHeaders -ContentType "application/json; charset=utf-8" -Method post -Body $JSON
                 $upgradeRequestReturn.data
-                sleep -Seconds 1
+                Start-Sleep -Seconds 1
             }catch{
                 Write-Warning $_
             }
         }
     }else{
+        Start-Sleep -Seconds 1
         write-host "dry run" -ForegroundColor yellow
-        $doUpgreads | ft * -AutoSize
+        $doUpgreads | Format-Table * -AutoSize
         exit
     }
 }else{ write-warning "No upgradeable devices found for the selected device types." }
