@@ -1,54 +1,66 @@
 <#
-    .NAME
-    ubnt_upgrade_dev
-
     .SYNOPSIS
-    Update APs, Switches and Gateways
-
-    .SYNTAX
-    ubnt_upgrade_dev [[-Server] <string>] [[-username] <string>] [[-password] <string>] [-Legacy]
+    Lists or installs available firmware updates for UniFi devices.
 
     .DESCRIPTION
-    Checks if there are devices with available FW-Upgrade and runs the upgrade
+    Connects to a UniFi OS Server by default, or to a classic UniFi Network
+    Controller when -Legacy is specified. Finds firmware updates for access
+    points, switches and gateways. Updates are installed only for device types
+    explicitly selected with the corresponding update switch.
 
     .PARAMETER Server
-    Specifies the ubnt controller server
+    Hostname or IP address of the UniFi controller, without protocol or port.
 
     .PARAMETER Port
-    (Optional) Specifies the controller port (Default: UniFi OS = 443, Legacy = 8443)
+    HTTPS port. Defaults to 443 for UniFi OS and 8443 with -Legacy.
 
     .PARAMETER Legacy
-    Use the legacy UniFi Network Controller API instead of the UniFi OS API
+    Uses the classic UniFi Network Controller API instead of the UniFi OS API.
 
     .PARAMETER Username
-    Username to connect to ubnt server
+    Username used to authenticate with the controller.
 
     .PARAMETER Password
-    Password for Username to connect
+    Password used to authenticate with the controller.
 
     .PARAMETER Sites
-    (Optional) Update specific sites only
+    Site IDs to process. When omitted, all accessible sites are processed.
 
     .PARAMETER ExcludeSite
-    (Optional) To use if you would like to update all sites except a couple
+    Site IDs to exclude when -Sites is not specified.
 
     .PARAMETER Info
-    (Optional) Output of additional info (Default = False)
+    Displays additional site and device information.
 
     .PARAMETER ListSites
-    List sites containing upgradable devices and exit without upgrading
+    Lists sites containing upgradable devices and exits without upgrading.
 
     .PARAMETER UpdateAPs
-    (Optional) Update Access Points (Default = False)
+    Installs available firmware updates on access points.
 
     .PARAMETER UpdateSwitches
-    (Optional) Update Switches (Default = False)
+    Installs available firmware updates on switches.
 
     .PARAMETER UpdateGateways
-    (Optional) Update Gateways (Default = False)
+    Installs available firmware updates on gateways.
 
     .PARAMETER DryRun
-    (Optional) Run full script except do not send update command to APs
+    Displays the selected updates without sending upgrade commands.
+
+    .EXAMPLE
+    .\ubnt_upgrade_dev.ps1 -Server 'unifi.example.com' -Username 'FWUpgrade' -Password 'secret' -ListSites
+
+    Lists all UniFi OS sites containing devices with available firmware updates.
+
+    .EXAMPLE
+    .\ubnt_upgrade_dev.ps1 -Server 'unifi.example.com' -Username 'FWUpgrade' -Password 'secret' -UpdateSwitches -DryRun
+
+    Shows the switches that would be upgraded on a UniFi OS Server.
+
+    .EXAMPLE
+    .\ubnt_upgrade_dev.ps1 -Server 'controller.example.com' -Username 'admin' -Password 'secret' -Legacy -UpdateAPs
+
+    Installs available access point updates through a classic controller.
 
     .NOTES
     20220610 Initial Version
